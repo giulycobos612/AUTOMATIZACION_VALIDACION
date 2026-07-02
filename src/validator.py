@@ -1,18 +1,19 @@
 import re
 import asyncio
+import tenacity
 from typing import List, Dict, Any, Union
 from .models import PublicationRecord, ValidationResult, AIValidationReport
 from .api_clients import MetadataFetcher
-from .ai_agent import AIManager
+from .ai_agent import AIAgent
 
 class PublicationValidator:
     """
     Main Orchestrator for validating DOIs and ISSNs.
     Combines async API fetchers, AI analysis and an in-memory cache.
     """
-    def __init__(self, ai_api_key: str = None):
-        self.ai_manager = AIManager(api_key=ai_api_key)
-        self.fetcher = MetadataFetcher()
+    def __init__(self, fetcher: MetadataFetcher = None, ai_api_key: str = None):
+        self.fetcher = fetcher or MetadataFetcher()
+        self.ai_manager = AIAgent(ai_api_key)
         self._cache: Dict[str, ValidationResult] = {}
         
     def _clean_code(self, code: Union[str, None]) -> str:
@@ -30,17 +31,20 @@ class PublicationValidator:
         # Basic ISSN format (with or without hyphen)
         return bool(re.match(r'^\d{4}-?\d{3}[\dxX]$', issn, re.IGNORECASE))
 
-    async def validate_record(self, record: Union[Dict[str, Any], PublicationRecord]) -> ValidationResult:
+    async def validate_record(self, record: Union[Dict[str, Any], PublicationRecord], ai_semaphore: asyncio.Semaphore = None) -> ValidationResult:
         if isinstance(record, dict):
             record = PublicationRecord(**record)
             
         doi_limpio = self._clean_code(record.codigo_doi)
         issn_limpio = self._clean_code(record.codigo_issn)
         
-        # Generar llave de cache única para este registro
-        cache_key = f"doi:{doi_limpio}" if doi_limpio else f"issn:{issn_limpio}"
-        if cache_key in self._cache and cache_key not in ["doi:", "issn:"]:
-            print(f"[CACHE HIT] Se obtuvo {cache_key} de la caché.")
+        # Generar llave de cache única para este registro que incluya los datos de entrada
+        import hashlib
+        record_str = f"{record.titulo}_{record.autores}_{record.revista_editorial}"
+        record_hash = hashlib.md5(record_str.encode('utf-8')).hexdigest()
+        cache_key = f"doi:{doi_limpio}_{record_hash}" if doi_limpio else f"issn:{issn_limpio}_{record_hash}"
+        if cache_key in self._cache and not (not doi_limpio and not issn_limpio):
+            # print(f"[CACHE HIT] Se obtuvo {cache_key} de la caché.")
             return self._cache[cache_key]
         
         if doi_limpio:
@@ -49,18 +53,33 @@ class PublicationValidator:
                 try:
                     official_data = await self.fetcher.fetch_doi_metadata(doi_limpio)
                 except Exception as e:
-                    print(f"Error fetching DOI {doi_limpio} after retries: {e}")
+                    # print(f"Error fetching DOI {doi_limpio} after retries: {e}")
                     official_data = None
                     
                 try:
-                    result = await self.ai_manager.validate_doi(record, official_data)
+                    if ai_semaphore:
+                        async with ai_semaphore:
+                            await asyncio.sleep(2.1)
+                            result = await self.ai_manager.validate_doi(record, official_data)
+                    else:
+                        result = await self.ai_manager.validate_doi(record, official_data)
+                except tenacity.RetryError as e:
+                    ex = e.last_attempt.exception()
+                    err_msg = getattr(ex, 'message', str(ex))
+                    result = ValidationResult(
+                        codigo=doi_limpio,
+                        publicacion_encontrada="Error Crítico (IA)",
+                        datos_registrados=record.titulo or "Desconocido",
+                        coincide="No",
+                        observaciones=f"Error al validar con IA tras múltiples reintentos: {err_msg}"
+                    )
                 except Exception as e:
                     result = ValidationResult(
                         codigo=doi_limpio,
                         publicacion_encontrada="Error Crítico",
                         datos_registrados=record.titulo or "Desconocido",
                         coincide="No",
-                        observaciones=f"Error al validar con IA tras reintentos: {str(e)}"
+                        observaciones=f"Error inesperado al validar: {str(e)}"
                     )
                     
                 self._cache[cache_key] = result
@@ -80,18 +99,33 @@ class PublicationValidator:
                 try:
                     official_data = await self.fetcher.fetch_issn_metadata(issn_limpio)
                 except Exception as e:
-                    print(f"Error fetching ISSN {issn_limpio} after retries: {e}")
+                    # print(f"Error fetching ISSN {issn_limpio} after retries: {e}")
                     official_data = None
                     
                 try:
-                    result = await self.ai_manager.validate_issn(record, official_data)
+                    if ai_semaphore:
+                        async with ai_semaphore:
+                            await asyncio.sleep(2.1)
+                            result = await self.ai_manager.validate_issn(record, official_data)
+                    else:
+                        result = await self.ai_manager.validate_issn(record, official_data)
+                except tenacity.RetryError as e:
+                    ex = e.last_attempt.exception()
+                    err_msg = getattr(ex, 'message', str(ex))
+                    result = ValidationResult(
+                        codigo=issn_limpio,
+                        publicacion_encontrada="Error Crítico (IA)",
+                        datos_registrados=record.titulo or "Desconocido",
+                        coincide="No",
+                        observaciones=f"Error al validar con IA tras múltiples reintentos: {err_msg}"
+                    )
                 except Exception as e:
                     result = ValidationResult(
                         codigo=issn_limpio,
                         publicacion_encontrada="Error Crítico",
                         datos_registrados=record.titulo or "Desconocido",
                         coincide="No",
-                        observaciones=f"Error al validar con IA tras reintentos: {str(e)}"
+                        observaciones=f"Error inesperado al validar: {str(e)}"
                     )
                     
                 self._cache[cache_key] = result
@@ -116,10 +150,22 @@ class PublicationValidator:
 
     async def validate_batch(self, records: List[Union[Dict[str, Any], PublicationRecord]]) -> AIValidationReport:
         """
-        Validates a batch of records asynchronously and concurrently.
+        Validates a batch of records asynchronously, using an AI Semaphore to prevent Groq API Rate Limits.
         """
-        tasks = [self.validate_record(rec) for rec in records]
+        # Semáforo para controlar la concurrencia de la IA (evitar 429 Rate Limit en Groq - 30 RPM)
+        ai_sem = asyncio.Semaphore(1)
+        
+        async def wrap_validate(rec):
+            res = await self.validate_record(rec, ai_semaphore=ai_sem)
+            return res
+                
+        tasks = [wrap_validate(rec) for rec in records]
         results = await asyncio.gather(*tasks)
+        
+        # Cerrar conexión compartida de aiohttp de manera segura si se creó
+        if hasattr(self.fetcher, 'close'):
+            await self.fetcher.close()
+            
         return AIValidationReport(resultados=list(results))
 
 # =========================================================================================
