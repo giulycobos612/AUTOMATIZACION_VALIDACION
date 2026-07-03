@@ -1,0 +1,18 @@
+# Ignorar archivos de Excel
+*.xlsx
+*.xls
+*.csv
+
+# Ignorar archivos temporales y copias
+copy_*.xlsx
+
+# Ignorar PDFs o documentos personales
+*.pdf
+
+# Directorios de PyCharm / IDEs
+.idea/
+.vscode/
+
+# Python cache
+__pycache__/
+*.pyc
