@@ -35,8 +35,9 @@ class AIAgent:
             "REGLAS ESTRICTAS:\n"
             "1. En el campo 'datos_registrados' debes incluir EXACTAMENTE lo que el usuario ingresó (el Título y Autores). No lo alteres.\n"
             "2. En el campo 'publicacion_encontrada' debes incluir el título y autores reales extraídos de los datos oficiales.\n"
-            "3. Evalúa 'coincide' como 'Sí' solo si el título o los autores coinciden sustancialmente (pueden haber variaciones de formato o traducciones).\n"
-            "4. En 'observaciones' explica por qué coinciden o no, detectando errores tipográficos, traducciones, o si el DOI pertenece a un artículo completamente distinto.\n"
+            "3. Evalúa 'coincide' como 'Sí' si el título o los autores proporcionados coinciden sustancialmente.\n"
+            "4. CRÍTICO: Si el usuario proporcionó solo un campo (ej. solo Título o solo Autores), realiza la validación usando solo ese campo. Si proporcionó ambos, evalúa usando ambos. Si AMBOS están completamente vacíos o dicen 'None'/'Desconocido', DEBES evaluar 'coincide' como 'No' e indicar que faltan datos.\n"
+            "5. En 'observaciones' explica en qué coinciden o fallan, detectando errores tipográficos, traducciones, o si falta información.\n"
             "DEBES RESPONDER ÚNICAMENTE CON UN JSON VÁLIDO QUE TENGA LA SIGUIENTE ESTRUCTURA:\n"
             '{"codigo": "string", "publicacion_encontrada": "string", "datos_registrados": "string", "coincide": "string (Sí/No)", "observaciones": "string"}'
         )
@@ -85,6 +86,7 @@ class AIAgent:
             "1. En el campo 'datos_registrados' debes incluir EXACTAMENTE lo que el usuario ingresó para Título/Revista y para Revista/Editorial.\n"
             "2. En el campo 'publicacion_encontrada' debes incluir el título y editorial oficiales del ISSN.\n"
             "3. Compara si la revista o serie registrada coincide. Si la editorial ingresada no coincide (ej. puso el nombre de un autor), repórtalo en 'observaciones'.\n"
+            "4. CRÍTICO: Si el usuario proporcionó solo un campo (ej. solo Título o solo Editorial), realiza la validación usando solo ese campo. Si proporcionó ambos, evalúa usando ambos. Si AMBOS están vacíos o dicen 'None'/'Desconocido', DEBES evaluar 'coincide' como 'No' e indicar que faltan datos.\n"
             "DEBES RESPONDER ÚNICAMENTE CON UN JSON VÁLIDO QUE TENGA LA SIGUIENTE ESTRUCTURA:\n"
             '{"codigo": "string", "publicacion_encontrada": "string", "datos_registrados": "string", "coincide": "string (Sí/No)", "observaciones": "string"}'
         )

@@ -19,6 +19,25 @@ class PublicationValidator:
     def _clean_code(self, code: Union[str, None]) -> str:
         return code.strip() if code else ""
 
+    def _limpiar_codigo(self, raw: str) -> str:
+        if not raw: return ""
+        cleaned = str(raw).strip()
+        if "doi.org/" in cleaned:
+            cleaned = cleaned.split("doi.org/")[-1]
+        
+        # Eliminar prefijos comunes que el usuario pueda haber ingresado por error
+        cleaned = re.sub(r'(?i)^doi:\s*', '', cleaned)
+        cleaned = re.sub(r'(?i)^issn:\s*', '', cleaned)
+        
+        # Eliminar cualquier prefijo extraño que termine en ":" antes de un número
+        if ":" in cleaned and not cleaned.startswith("10."):
+            partes = cleaned.split(":", 1)
+            if len(partes) > 1 and (partes[1].strip().startswith("10.") or re.match(r'^\d', partes[1].strip())):
+                cleaned = partes[1].strip()
+                
+        cleaned = re.sub(r'[^a-zA-Z0-9.\-/:_;()]', '', cleaned)
+        return cleaned
+
     def _is_valid_doi_format(self, doi: str) -> bool:
         if not doi:
             return False
