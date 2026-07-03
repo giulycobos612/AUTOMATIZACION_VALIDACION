@@ -32,11 +32,10 @@ class AIAgent:
         system_prompt = (
             "Actúa como un especialista en gestión de información científica y validación bibliográfica. "
             "Tu objetivo es verificar que los metadatos registrados (título, autores, etc.) correspondan con los datos oficiales del DOI.\n"
-            "REGLAS ESTRICTAS:\n"
             "1. En el campo 'datos_registrados' debes incluir EXACTAMENTE lo que el usuario ingresó (el Título y Autores). No lo alteres.\n"
             "2. En el campo 'publicacion_encontrada' debes incluir el título y autores reales extraídos de los datos oficiales.\n"
-            "3. Evalúa 'coincide' como 'Sí' si el título o los autores proporcionados coinciden sustancialmente.\n"
-            "4. CRÍTICO: Si el usuario proporcionó solo un campo (ej. solo Título o solo Autores), realiza la validación usando solo ese campo. Si proporcionó ambos, evalúa usando ambos. Si AMBOS están completamente vacíos o dicen 'None'/'Desconocido', DEBES evaluar 'coincide' como 'No' e indicar que faltan datos.\n"
+            "3. Si el usuario ingresó el Título y coincide con el oficial, evalúa 'coincide' como 'Sí' INCLUSO SI dejó los Autores en blanco o como 'Desconocido'. (Un solo campo correcto es suficiente para validar el DOI).\n"
+            "4. CRÍTICO: Evalúa 'coincide' como 'No' SOLAMENTE si la información proporcionada es incorrecta/no coincide, o si AMBOS campos (Título y Autores) están completamente en blanco.\n"
             "5. En 'observaciones' explica en qué coinciden o fallan, detectando errores tipográficos, traducciones, o si falta información.\n"
             "DEBES RESPONDER ÚNICAMENTE CON UN JSON VÁLIDO QUE TENGA LA SIGUIENTE ESTRUCTURA:\n"
             '{"codigo": "string", "publicacion_encontrada": "string", "datos_registrados": "string", "coincide": "string (Sí/No)", "observaciones": "string"}'
@@ -85,8 +84,8 @@ class AIAgent:
             "REGLAS ESTRICTAS:\n"
             "1. En el campo 'datos_registrados' debes incluir EXACTAMENTE lo que el usuario ingresó para Título/Revista y para Revista/Editorial.\n"
             "2. En el campo 'publicacion_encontrada' debes incluir el título y editorial oficiales del ISSN.\n"
-            "3. Compara si la revista o serie registrada coincide. Si la editorial ingresada no coincide (ej. puso el nombre de un autor), repórtalo en 'observaciones'.\n"
-            "4. CRÍTICO: Si el usuario proporcionó solo un campo (ej. solo Título o solo Editorial), realiza la validación usando solo ese campo. Si proporcionó ambos, evalúa usando ambos. Si AMBOS están vacíos o dicen 'None'/'Desconocido', DEBES evaluar 'coincide' como 'No' e indicar que faltan datos.\n"
+            "3. Si el usuario ingresó el Título/Revista y coincide con el oficial, evalúa 'coincide' como 'Sí' INCLUSO SI dejó la Revista/Editorial en blanco o como 'Desconocido'. (Un solo campo correcto es suficiente para validar el ISSN).\n"
+            "4. CRÍTICO: Evalúa 'coincide' como 'No' SOLAMENTE si la información proporcionada es incorrecta/no coincide, o si AMBOS campos (Título y Editorial) están completamente en blanco.\n"
             "DEBES RESPONDER ÚNICAMENTE CON UN JSON VÁLIDO QUE TENGA LA SIGUIENTE ESTRUCTURA:\n"
             '{"codigo": "string", "publicacion_encontrada": "string", "datos_registrados": "string", "coincide": "string (Sí/No)", "observaciones": "string"}'
         )

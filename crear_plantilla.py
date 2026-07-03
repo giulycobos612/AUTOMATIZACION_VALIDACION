@@ -1,6 +1,11 @@
 import pandas as pd
 import os
 
+
+def print(param):
+    pass
+
+
 def crear_plantilla():
     archivo_salida = "registros_entrada.xlsx"
     

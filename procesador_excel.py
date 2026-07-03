@@ -8,6 +8,15 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from src.validator import PublicationValidator
 
+
+def print(param):
+    pass
+
+
+def input():
+    pass
+
+
 async def main():
     print("\n" + "="*70)
     print("PROCESADOR MASIVO DE DOI/ISSN (EXCEL)")
