@@ -91,9 +91,12 @@ async def main():
         res = await f
         resultados.append(res)
         
-    # Cerrar conexión compartida de aiohttp de manera segura
+    # Cerrar conexión compartida de aiohttp y cliente de IA de manera segura
     if hasattr(validator.fetcher, 'close'):
         await validator.fetcher.close()
+        
+    if hasattr(validator.ai_manager, 'client') and hasattr(validator.ai_manager.client, 'close'):
+        await validator.ai_manager.client.close()
         
     print("\n\nGenerando archivo Excel de resultados...")
     
@@ -124,52 +127,68 @@ async def main():
 
     df_out = pd.DataFrame(filas_salida)
     
-    # Guardar con xlsxwriter y formato
-    with pd.ExcelWriter(archivo_salida, engine='xlsxwriter') as writer:
-        df_out.to_excel(writer, index=False, sheet_name='Validacion')
-        workbook = writer.book
-        worksheet = writer.sheets['Validacion']
-        
-        # Formatos
-        header_format = workbook.add_format({
-            'bold': True,
-            'text_wrap': True,
-            'valign': 'top',
-            'fg_color': '#D7E4BC',
-            'border': 1
-        })
-        
-        formato_si = workbook.add_format({'bg_color': '#C6EFCE', 'font_color': '#006100', 'border': 1})
-        formato_no = workbook.add_format({'bg_color': '#FFC7CE', 'font_color': '#9C0006', 'border': 1})
-        formato_default = workbook.add_format({'border': 1, 'text_wrap': True, 'valign': 'top'})
-        
-        # Ancho de columnas
-        worksheet.set_column('A:A', 20)
-        worksheet.set_column('B:B', 20)
-        worksheet.set_column('C:C', 15)
-        worksheet.set_column('D:E', 45)
-        worksheet.set_column('F:F', 50)
-        
-        for col_num, value in enumerate(df_out.columns.values):
-            worksheet.write(0, col_num, value, header_format)
-            
-        for row_num in range(len(df_out)):
-            coincide_val = str(df_out.iloc[row_num]['COINCIDE (IA)']).strip().lower()
-            if coincide_val == 'sí' or coincide_val == 'si':
-                fmt = formato_si
-            else:
-                fmt = formato_no
+    # Intentar guardar el archivo, creando copias si está abierto
+    guardado = False
+    intentos = 0
+    nombre_base, ext = os.path.splitext(archivo_salida)
+    archivo_actual = archivo_salida
+
+    while not guardado and intentos < 10:
+        try:
+            with pd.ExcelWriter(archivo_actual, engine='xlsxwriter') as writer:
+                df_out.to_excel(writer, index=False, sheet_name='Validacion')
+                workbook = writer.book
+                worksheet = writer.sheets['Validacion']
                 
-            worksheet.write(row_num + 1, 2, df_out.iloc[row_num]['COINCIDE (IA)'], fmt)
-            
-            # Escribir el resto con formato default
-            worksheet.write(row_num + 1, 0, df_out.iloc[row_num]['ISBN Original'], formato_default)
-            worksheet.write(row_num + 1, 1, df_out.iloc[row_num]['Código Validado'], formato_default)
-            worksheet.write(row_num + 1, 3, df_out.iloc[row_num]['Datos Oficiales (Internet)'], formato_default)
-            worksheet.write(row_num + 1, 4, df_out.iloc[row_num]['Tus Datos (Ingresados)'], formato_default)
-            worksheet.write(row_num + 1, 5, df_out.iloc[row_num]['Observaciones IA'], formato_default)
-            
-    print(f"\n¡Éxito! Los resultados se han guardado en: '{archivo_salida}'")
+                # Formatos
+                header_format = workbook.add_format({
+                    'bold': True,
+                    'text_wrap': True,
+                    'valign': 'top',
+                    'fg_color': '#D7E4BC',
+                    'border': 1
+                })
+                
+                formato_si = workbook.add_format({'bg_color': '#C6EFCE', 'font_color': '#006100', 'border': 1})
+                formato_no = workbook.add_format({'bg_color': '#FFC7CE', 'font_color': '#9C0006', 'border': 1})
+                formato_default = workbook.add_format({'border': 1, 'text_wrap': True, 'valign': 'top'})
+                
+                # Ancho de columnas
+                worksheet.set_column('A:A', 20)
+                worksheet.set_column('B:B', 20)
+                worksheet.set_column('C:C', 15)
+                worksheet.set_column('D:E', 45)
+                worksheet.set_column('F:F', 50)
+                
+                for col_num, value in enumerate(df_out.columns.values):
+                    worksheet.write(0, col_num, value, header_format)
+                    
+                for row_num in range(len(df_out)):
+                    coincide_val = str(df_out.iloc[row_num]['COINCIDE (IA)']).strip().lower()
+                    if coincide_val == 'sí' or coincide_val == 'si':
+                        fmt = formato_si
+                    else:
+                        fmt = formato_no
+                        
+                    worksheet.write(row_num + 1, 2, df_out.iloc[row_num]['COINCIDE (IA)'], fmt)
+                    
+                    # Escribir el resto con formato default
+                    worksheet.write(row_num + 1, 0, df_out.iloc[row_num]['ISBN Original'], formato_default)
+                    worksheet.write(row_num + 1, 1, df_out.iloc[row_num]['Código Validado'], formato_default)
+                    worksheet.write(row_num + 1, 3, df_out.iloc[row_num]['Datos Oficiales (Internet)'], formato_default)
+                    worksheet.write(row_num + 1, 4, df_out.iloc[row_num]['Tus Datos (Ingresados)'], formato_default)
+                    worksheet.write(row_num + 1, 5, df_out.iloc[row_num]['Observaciones IA'], formato_default)
+                    
+            guardado = True
+            print(f"\n¡Éxito! Los resultados se han guardado en: '{archivo_actual}'")
+            if intentos > 0:
+                print("NOTA: Se guardó con otro nombre porque tenías el archivo original abierto en Excel.")
+        except PermissionError:
+            intentos += 1
+            archivo_actual = f"{nombre_base}_copia_{intentos}{ext}"
+        except Exception as e:
+            print(f"\nERROR inesperado al guardar: {e}")
+            break
 
 
 if __name__ == "__main__":

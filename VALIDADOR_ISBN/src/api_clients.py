@@ -4,6 +4,14 @@ from typing import Optional, Dict, Any
 from tenacity import retry, stop_after_attempt, wait_exponential
 import re
 
+import warnings
+try:
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        from duckduckgo_search import DDGS
+except ImportError:
+    DDGS = None
+
 class MetadataFetcher:
     def __init__(self):
         self.session: Optional[aiohttp.ClientSession] = None
@@ -120,5 +128,39 @@ class MetadataFetcher:
         except Exception:
             pass # Si falla UDLA (timeout o caída), simplemente pasa a retornar None
                 
+        # 4. Fallback: Intentar con Búsqueda Universal en DuckDuckGo
+        if DDGS is not None:
+            try:
+                def _search_ddg():
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", category=RuntimeWarning)
+                        with DDGS() as ddgs:
+                            # Buscamos literalmente "ISBN XXXXXXXXXXXXX"
+                            return list(ddgs.text(f'"ISBN {isbn}"', max_results=3))
+                        
+                # Ejecutar búsqueda en un hilo separado para no bloquear el loop asíncrono
+                results = await asyncio.to_thread(_search_ddg)
+                
+                if results:
+                    # Consolidar los resultados encontrados en un bloque de texto
+                    text_snippets = []
+                    for idx, r in enumerate(results):
+                        title = r.get('title', '')
+                        body = r.get('body', '')
+                        text_snippets.append(f"Resultado {idx+1}:\nTítulo: {title}\nFragmento: {body}\n")
+                    
+                    consolidated_text = "\n".join(text_snippets)
+                    
+                    return {
+                        # Pasamos el texto crudo en el campo título para que la IA decida
+                        "titulo": f"[TEXTO EXTRAÍDO DE INTERNET]\n{consolidated_text}",
+                        "autores": "Extraer del texto",
+                        "editorial": "Extraer del texto",
+                        "anio_publicacion": "Extraer del texto",
+                        "fuente": "Búsqueda Web (DuckDuckGo)"
+                    }
+            except Exception:
+                pass # Si DDGS falla o nos bloquea, simplemente continuamos
+
         # Si todas fallan o no hay datos, devolvemos None
         return None
