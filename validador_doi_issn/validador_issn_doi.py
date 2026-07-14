@@ -11,7 +11,7 @@ from src.validator import PublicationValidator
 
 st.set_page_config(page_title="Validador DOI/ISSN", page_icon="📚", layout="centered")
 
-st.title("📚 Validador Inteligente de DOI e ISSN")
+st.title("Validador de DOI e ISSN")
 st.markdown("Sube tu archivo Excel con registros bibliográficos y la Inteligencia Artificial los validará automáticamente contra las bases de datos oficiales de internet.")
 
 # 1. Solicitar API KEY
