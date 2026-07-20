@@ -9,38 +9,31 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from src.validator import PublicationValidator
 
-st.set_page_config(page_title="Validador DOI/ISSN", page_icon="📚", layout="centered")
+st.set_page_config(page_title="Validador DOI/ISSN Matemático", page_icon="📚", layout="centered")
 
-st.title("Validador de DOI e ISSN")
-st.markdown("Sube tu archivo Excel con registros bibliográficos y la Inteligencia Artificial los validará automáticamente contra las bases de datos oficiales de internet.")
+st.title("Validador de DOI e ISSN (Similitud Matemática)")
+st.markdown("Sube tu archivo Excel con registros bibliográficos. El sistema conectará con Crossref/OpenAlex y aplicará un motor matemático para validar si el título coincide con el código oficial.")
 
-# 1. Solicitar API KEY
-api_key = st.text_input("🔑 Ingresa tu API KEY de Groq (gsk_...):", type="password")
+# Ya no se pide API KEY de Groq
 
-if api_key:
-    os.environ["GROQ_API_KEY"] = api_key
-else:
-    st.warning("⚠️ Debes ingresar tu API KEY de Groq para continuar.")
-    st.stop()
-
-# 2. Subir Archivo Excel
+# Subir Archivo Excel
 uploaded_file = st.file_uploader("📂 Sube tu archivo Excel", type=["xlsx"])
 
 if uploaded_file is not None:
     try:
         df = pd.read_excel(uploaded_file)
         
-        columnas_esperadas = ["TIPO", "CODIGO", "TITULO", "AUTORES_EDITORIAL"]
+        columnas_esperadas = ["TIPO", "CODIGO", "TITULO"]
         faltantes = [col for col in columnas_esperadas if col not in df.columns]
         
         if faltantes:
             st.error(f"❌ Faltan las siguientes columnas en tu Excel: {', '.join(faltantes)}")
-            st.info("Asegúrate de que el archivo tenga exactamente estas columnas: TIPO, CODIGO, TITULO, AUTORES_EDITORIAL.")
+            st.info("Asegúrate de que el archivo tenga exactamente estas columnas: TIPO, CODIGO, TITULO.")
             st.stop()
             
         st.success(f"✅ Archivo cargado correctamente. Se encontraron {len(df)} registros.")
         
-        if st.button("🚀 Iniciar Validación Inteligente", type="primary"):
+        if st.button("🚀 Iniciar Validación Rápida", type="primary"):
             
             async def ejecutar_validacion():
                 registros_a_procesar = []
@@ -48,7 +41,6 @@ if uploaded_file is not None:
                     tipo = str(row.get("TIPO", "")).strip().upper()
                     codigo = str(row.get("CODIGO", "")).strip()
                     titulo = str(row.get("TITULO", "")).strip() if pd.notna(row.get("TITULO", "")) else ""
-                    autores = str(row.get("AUTORES_EDITORIAL", "")).strip() if pd.notna(row.get("AUTORES_EDITORIAL", "")) else ""
                     
                     if tipo not in ["DOI", "ISSN"]:
                         tipo = "DOI" if "10." in codigo else "ISSN"
@@ -57,9 +49,9 @@ if uploaded_file is not None:
                         "id_registro": f"Fila_{idx+2}",
                         "tipo_publicacion": "ARTICULO" if tipo == "DOI" else "REVISTA",
                         "titulo": titulo if titulo else "Desconocido",
-                        "autores": autores if autores else "Desconocidos",
+                        "autores": "",
                         "anio_publicacion": "",
-                        "revista_editorial": autores if tipo == "ISSN" else ""
+                        "revista_editorial": ""
                     }
                     
                     if tipo == "DOI":
@@ -71,35 +63,26 @@ if uploaded_file is not None:
                         
                     registros_a_procesar.append(registro)
                     
-                validador = PublicationValidator()
-                ai_sem = asyncio.Semaphore(1) # Limitamos concurrencia para evitar sobrecargar la API
+                validador = PublicationValidator(threshold=0.85)
                 
                 status_text = st.empty()
-                status_text.info("Procesando lote en paralelo con Inteligencia Artificial... (Esto puede tomar varios segundos)")
+                status_text.info("Procesando lote con motor matemático de alta velocidad...")
                 
-                async def process_one(rec):
-                    return await validador.validate_record(rec, ai_semaphore=ai_sem)
+                # Ejecutar de forma concurrente veloz
+                report = await validador.validate_batch(registros_a_procesar)
+                return report.resultados
 
-                tasks = [process_one(rec) for rec in registros_a_procesar]
-                
-                # Ejecutar todos respetando el orden
-                resultados_list = await asyncio.gather(*tasks)
-                
-                if hasattr(validador.fetcher, 'close'):
-                    await validador.fetcher.close()
-                    
-                return resultados_list
-
-            with st.spinner('🤖 Analizando registros en la nube...'):
+            with st.spinner('⚡ Consultando APIs oficiales y calculando similitud...'):
                 resultados_list = asyncio.run(ejecutar_validacion())
                 
             st.success("✅ ¡Validación completada con éxito!")
             
             # Preparar el DataFrame de salida
             df_out = df.copy()
-            df_out["COINCIDE_IA"] = [res.coincide for res in resultados_list]
-            df_out["OBSERVACIONES_IA"] = [res.observaciones for res in resultados_list]
-            df_out["DATOS_OFICIALES"] = [res.publicacion_encontrada for res in resultados_list]
+            df_out["%_SIMILITUD"] = [res.similitud for res in resultados_list]
+            df_out["COINCIDE_MATH"] = [res.coincide for res in resultados_list]
+            df_out["OBSERVACIONES"] = [res.observaciones for res in resultados_list]
+            df_out["TITULO_OFICIAL"] = [res.publicacion_encontrada for res in resultados_list]
             
             # Guardar en memoria (BytesIO) para el botón de descarga
             output = io.BytesIO()
@@ -120,7 +103,7 @@ if uploaded_file is not None:
             st.download_button(
                 label="📥 Descargar Reporte de Resultados (Excel)",
                 data=excel_data,
-                file_name="resultados_validacion_doi_issn.xlsx",
+                file_name="resultados_validacion_matematica.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary"
             )

@@ -17,6 +17,7 @@ class ValidationResult(BaseModel):
     datos_registrados: str = Field(..., description="Details of the registered data")
     coincide: str = Field(..., description="Does it match? 'Sí' or 'No'")
     observaciones: str = Field(..., description="Inconsistencies, missing info, format errors, etc.")
+    similitud: float = Field(0.0, description="Percentage of similarity (0.0 to 100.0)")
     
 class AIValidationReport(BaseModel):
     resultados: List[ValidationResult]
